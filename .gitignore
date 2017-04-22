@@ -37,3 +37,4 @@ particle_filter.cpp
 *.exe
 *.out
 *.app
+*.swp
