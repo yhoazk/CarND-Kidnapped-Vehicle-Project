@@ -12,15 +12,29 @@
 
 #include "particle_filter.h"
 
-void ParticleFilter::init(double x, double y, double theta, double std[]) {
+#ifndef NUM_PARTICLES
+  #define NUM_PARTICLES (500)
+#endif /* NUM_PARTICLES */
+
+
+
+
+void ParticleFilter::init(double x, double y, double theta, double std[])
+{
 	// TODO: Set the number of particles. Initialize all particles to first position (based on estimates of 
 	//   x, y, theta and their uncertainties from GPS) and all weights to 1. 
 	// Add random Gaussian noise to each particle.
 	// NOTE: Consult particle_filter.h for more information about this method (and others in this file).
+  num_particles = NUM_PARTICLES;
 
+
+
+
+	is_initialized = (1==1);
 }
 
-void ParticleFilter::prediction(double delta_t, double std_pos[], double velocity, double yaw_rate) {
+void ParticleFilter::prediction(double delta_t, double std_pos[], double velocity, double yaw_rate)
+{
 	// TODO: Add measurements to each particle and add random Gaussian noise.
 	// NOTE: When adding noise you may find std::normal_distribution and std::default_random_engine useful.
 	//  http://en.cppreference.com/w/cpp/numeric/random/normal_distribution
@@ -54,7 +68,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 void ParticleFilter::resample() {
 	// TODO: Resample particles with replacement with probability proportional to their weight. 
 	// NOTE: You may find std::discrete_distribution helpful here.
-	//   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution  
+	//   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
 
 }
 

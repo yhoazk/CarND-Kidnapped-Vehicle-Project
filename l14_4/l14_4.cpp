@@ -21,7 +21,7 @@ void printSamples(double gps_x, double gps_y, double psi) {
   default_random_engine gen;
   double std_x, std_y, std_psi; // Standard deviations for x, y, and psi
 
-  // TODO: Set standard deviations for x, y, and psi.
+  // Set standard deviations for x, y, and psi.
   std_x = 2;
   std_y = 2;
   std_psi = 0.05;
@@ -31,7 +31,7 @@ void printSamples(double gps_x, double gps_y, double psi) {
   // This line creates a normal (Gaussian) distribution for x.
   normal_distribution<double> dist_x(gps_x, std_x);
 
-  // TODO: Create normal distributions for y and psi.
+  // Create normal distributions for y and psi.
   normal_distribution<double> dist_y(gps_y, std_y);
   normal_distribution<double> dist_psi(psi, std_psi);
 
@@ -39,7 +39,7 @@ void printSamples(double gps_x, double gps_y, double psi) {
   for (int i = 0; i < 3; ++i) {
     double sample_x, sample_y, sample_psi;
 
-    // TODO: Sample  and from these normal distrubtions like this:
+    // Sample  and from these normal distrubtions like this:
     sample_x = dist_x(gen);
     sample_y = dist_y(gen);
     sample_psi = dist_psi(gen);
