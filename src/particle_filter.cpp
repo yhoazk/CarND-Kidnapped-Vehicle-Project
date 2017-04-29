@@ -18,7 +18,6 @@
 
 
 
-
 void ParticleFilter::init(double x, double y, double theta, double std[])
 {
 	// TODO: Set the number of particles. Initialize all particles to first position (based on estimates of 
@@ -26,11 +25,22 @@ void ParticleFilter::init(double x, double y, double theta, double std[])
 	// Add random Gaussian noise to each particle.
 	// NOTE: Consult particle_filter.h for more information about this method (and others in this file).
   num_particles = NUM_PARTICLES;
+  std::default_random_engine engine;
+  std::normal_distribution<double_t> x_rand(x,std[0]);
+  std::normal_distribution<double_t> y_rand(y,std[1]);
+  std::normal_distribution<double_t> th_rand(theta,std[2]);
+  Particle p;
+  for (int i = 0; i < num_particles; ++i)
+  {
+    p.weight = 1.0;
+    p.x = x_rand(engine);
+    p.y = y_rand(engine);
+    p.theta = th_rand(engine);
+    p.id = i;
+    particles.push_back(p);
+  }
 
-
-
-
-	is_initialized = (1==1);
+	is_initialized = 1;
 }
 
 void ParticleFilter::prediction(double delta_t, double std_pos[], double velocity, double yaw_rate)
@@ -39,6 +49,24 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 	// NOTE: When adding noise you may find std::normal_distribution and std::default_random_engine useful.
 	//  http://en.cppreference.com/w/cpp/numeric/random/normal_distribution
 	//  http://www.cplusplus.com/reference/random/default_random_engine/
+  /* Add noise to velocity and yaw rate */
+  std::default_random_engine eng;
+  std::normal_distribution<double_t> yaw_noise();
+  std::normal_distribution<double_t> velocity_noise();
+
+  /* Using the bycicle motion model update the particle position or each particle */
+  /* Bycicle motion model:
+   * x_f = x_0 + (v/thetha_dot)*(sin(theta_0 + theta_dot *dt) - sin(theta_0))
+   * y_f = y_0 + (v/thetha_dot)*(cos(theta_0) - sin(theta_0 + theta_dot *dt))
+   * theta_f = theta_0 + theta_dot *dt
+   * */
+  for(std::vector<Particle>::iterator p = particles.begin(); p != particles.end(); ++p)
+  {
+    p->x = p->x + ((velocity/yaw_rate) * (std::sin(p->theta + yaw_rate * delta_t) - std::sin(p->theta)));
+    p->y = p->y + ((velocity/yaw_rate) * (std::cos(p->theta) - std::cos(p->theta + yaw_rate * delta_t)));
+    p->theta += yaw_rate * delta_t;
+  }
+
 
 }
 
