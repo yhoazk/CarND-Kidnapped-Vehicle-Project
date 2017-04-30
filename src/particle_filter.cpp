@@ -9,15 +9,17 @@
 #include <algorithm>
 #include <iostream>
 #include <numeric>
+#include <map>
 
 #include "particle_filter.h"
 
 #ifndef NUM_PARTICLES
-  #define NUM_PARTICLES (500)
+  #define NUM_PARTICLES (100)
 #endif /* NUM_PARTICLES */
 
-
-
+#ifndef  M_PI
+#define M_PI (3.14159265358979323846f)  /* pi */
+#endif /* M_PI */
 /**
  * Efficient way to compare distances: https://en.wikibooks.org/wiki/Algorithms/Distance_approximations
  * */
@@ -56,7 +58,10 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 	//  http://www.cplusplus.com/reference/random/default_random_engine/
   /* Add noise to velocity and yaw rate */
   std::default_random_engine eng;
-
+  /*Adding noise mean 0 as is additive to the measurement */
+  std::normal_distribution<double_t> noise_x(0, std_pos[0]);
+  std::normal_distribution<double_t> noise_y(0, std_pos[1]);
+  std::normal_distribution<double_t> noise_th(0, std_pos[2]);
 
   /* Using the bycicle motion model update the particle position or each particle */
   /* Bycicle motion model for Yaw rate != 0:
@@ -73,11 +78,11 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 
   for(std::vector<Particle>::iterator p = particles.begin(); p != particles.end(); ++p)
   {
-    if(fabs(yaw_rate) < EPSILON)
+    if(fabs(yaw_rate) <= EPSILON)
     {
       p->x = p->x + velocity * delta_t * std::cos(p->theta);
       p->y = p->y + velocity * delta_t * std::sin(p->theta);
-      p->theta = 0;
+      p->theta = 0.0f;
     }
     else
     { /* Yaw rate is different from zero */
@@ -85,10 +90,7 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
       p->y = p->y + ((velocity/yaw_rate) * (std::cos(p->theta) - std::cos(p->theta + yaw_rate * delta_t)));
       p->theta += yaw_rate * delta_t;
     }
-    /*Adding noise*/
-    std::normal_distribution<double_t> noise_x(p->x, std_pos[0]);
-    std::normal_distribution<double_t> noise_y(p->y, std_pos[1]);
-    std::normal_distribution<double_t> noise_th(p->theta, std_pos[2]);
+
     /* Additive Gaussian noise */
     p->x += noise_x(eng);
     p->y += noise_y(eng);
@@ -120,14 +122,40 @@ void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::ve
       /*get the distance between points */
       // is it a better way instead of using sqrt()?
       // https://en.wikibooks.org/wiki/Algorithms/Distance_approximations
-
-      if(dist(obs_it->x,obs_it->y,l_it->x,l_it->y) < min_dist)
+      double current_dist = dist(obs_it->x,obs_it->y,l_it->x,l_it->y);
+      if(current_dist < min_dist)
       {
         obs_it->id = l_it->id;
+        min_dist = current_dist;
       }
     }
   }
 }
+
+/***
+ *
+ * Calculate the maximum likehood with the special case of the bivariate case Multivariate normal distribution
+ * https://en.wikipedia.org/wiki/Multivariate_normal_distribution#Non-degenerate_case
+ * For this case, as the correlation between X an Y is 0 rho is 0
+ * @param xi
+ * @param yi
+ * @param uix
+ * @param uiy
+ * @param cov_xx
+ * @param cov_yy
+ * @return density
+ */
+double_t get_weigth(double xi, double yi,  double uix, double uiy, double cov_xx, double cov_yy)
+{
+  double x_d = xi - uix;
+  double y_d = yi - uiy;
+  double X = (x_d * x_d)/(cov_xx*cov_xx);
+  double Y = (y_d * y_d)/(cov_yy*cov_yy);
+  /* The term involving rho=0 and thus the cross covariance is eliminated */
+
+  return  ( exp(-0.5f *(X+Y)) / (2.0f * M_PI * cov_xx *cov_yy));
+}
+
 /***
  * paso 1: trasnformar las mediciones del auto a coordenadas globales tomando como x0,y0 las coordenadas de la n part
  * paso 2: Por cada medicion de cada particula ya transformada asociar un landmark a ella si es que esta en el rango
@@ -155,11 +183,57 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 
   /* Transform the  observations to global coordinates */
   /* $\displaystyle \begin{pmatrix}x \cos\theta - y \sin\theta + x_t x \sin\theta + y \cos\theta + y_t \end{pmatrix} .$ */
-/*
-  std::vector<LandmarkObs>
-  for (int i = 0; i < observations.size(); ++i) {
 
-  }*/
+
+  /* For each particle transform the observation to the particle's coordinates  */
+  for(std::vector<Particle>::iterator p = particles.begin(); p != particles.end(); ++p)
+  {
+    /* Observations in global coordinates */
+    std::vector<LandmarkObs> map_global_obs(observations.size());
+    /*Transformed Map objects */
+    std::vector<LandmarkObs> restructured_map_landmarks;
+    /* Vector representing the landmarks in the range on the n-th particle*/
+    std::vector<LandmarkObs> inrange_landmarks;
+    /* In order to get the weight (likehood) of our particle being the current particle
+     * we need to associate the measurement with a land mark. This vector of maps repesents
+     * the association measurement:landmark
+     * */
+    std::map<int,LandmarkObs> assoc_landMark_ids;
+
+    /*Translate and rotate */
+    for (int i = 0; i < observations.size(); ++i)
+    {
+      // https://discussions.udacity.com/t/hint-in-update-weights-to-switch-the-minus-sign/242397
+      map_global_obs[i].x = observations[i].x * cos(p->theta) + observations[i].y * sin(p->theta) + p->x;
+      map_global_obs[i].y = observations[i].x * sin(p->theta) - observations[i].y * cos(p->theta) + p->y;
+    }
+    /*To reduce the load in the data association, discard the landmarks which are outside the range
+     * of the sensor of the particle */
+    for(std::vector<Map::single_landmark_s>::iterator l = map_landmarks.landmark_list.begin(); l != map_landmarks.landmark_list.end(); ++l)
+    {
+      if(dist(p->x,p->y,l->x_f,l->y_f) <= sensor_range)
+      {
+        restructured_map_landmarks.push_back(LandmarkObs{l->id_i, l->x_f, l->y_f});
+        // avoid landmark search using a map
+        //http://stackoverflow.com/questions/10309828/store-struct-in-a-map-checking-if-a-struct-exist-inside-a-map
+        assoc_landMark_ids.insert(std::make_pair(l->id_i, LandmarkObs{l->id_i, l->x_f, l->y_f}));
+      }
+    }
+
+    /* Find the nearest point in the points */
+    dataAssociation(restructured_map_landmarks, map_global_obs);
+    std::cout << " Observ: "<< map_global_obs.size() << " map landmarks: " << restructured_map_landmarks.size() << std::endl;
+    /* calculate weigth for each map global observation */
+    for (int j = 0; j < map_global_obs.size(); ++j)
+    {
+      // the id of the landmark closest to the observation is already in map_global_obs
+      double land_mark_x = assoc_landMark_ids[map_global_obs[j].id].x;
+      double land_mark_y = assoc_landMark_ids[map_global_obs[j].id].y;
+      p->weight *= get_weigth(map_global_obs[j].x, map_global_obs[j].y,
+                              land_mark_x, land_mark_y, std_landmark[0], std_landmark[1]);
+      weights.push_back(p->weight);
+    }
+  }
 }
 
 /***
@@ -170,7 +244,20 @@ void ParticleFilter::resample() {
 	// TODO: Resample particles with replacement with probability proportional to their weight. 
 	// NOTE: You may find std::discrete_distribution helpful here.
 	//   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
-
+  // Note:
+  // Do not implement the resampling wheel, instead use discrete_distribution
+  // https://discussions.udacity.com/t/resampling-algorithm-using-resampling-wheel/241313
+  std::vector<Particle> resampled_part;
+  std::random_device rd;
+  std::mt19937 eng(rd());
+  std::discrete_distribution<> d(weights.begin(), weights.end());
+  std::map<int,int> m;
+  for (int i = 0; i <num_particles ; ++i) {
+    resampled_part.push_back(particles[d(eng)]);
+  }
+  // restart the weigths
+  weights.clear();
+  particles = resampled_part; // this var won't die after?
 }
 
 void ParticleFilter::write(std::string filename) {
