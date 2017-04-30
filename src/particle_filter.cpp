@@ -8,14 +8,18 @@
 #include <random>
 #include <algorithm>
 #include <iostream>
-#include <numeric>
 #include <map>
+#include <algorithm>    // std::min_element, std::max_element
 
 #include "particle_filter.h"
 
 #ifndef NUM_PARTICLES
   #define NUM_PARTICLES (100)
 #endif /* NUM_PARTICLES */
+
+
+#define OPTIMAL
+#define RESAMPLING_WHEEL
 
 #ifndef  M_PI
 #define M_PI (3.14159265358979323846f)  /* pi */
@@ -48,7 +52,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[])
 
 /* Define what is zero in this implementation  */
 #ifndef EPSILON
-#define EPSILON ((double_t) 1e-3)
+#define EPSILON ((double_t) 1e-5)
 #endif /* EPSILON */
 void ParticleFilter::prediction(double delta_t, double std_pos[], double velocity, double yaw_rate)
 {
@@ -204,8 +208,8 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
     for (int i = 0; i < observations.size(); ++i)
     {
       // https://discussions.udacity.com/t/hint-in-update-weights-to-switch-the-minus-sign/242397
-      map_global_obs[i].x = observations[i].x * cos(p->theta) + observations[i].y * sin(p->theta) + p->x;
-      map_global_obs[i].y = observations[i].x * sin(p->theta) - observations[i].y * cos(p->theta) + p->y;
+      map_global_obs[i].x = observations[i].x * cos(p->theta) - observations[i].y * sin(p->theta) + p->x;
+      map_global_obs[i].y = observations[i].x * sin(p->theta) + observations[i].y * cos(p->theta) + p->y;
     }
     /*To reduce the load in the data association, discard the landmarks which are outside the range
      * of the sensor of the particle */
@@ -222,7 +226,8 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 
     /* Find the nearest point in the points */
     dataAssociation(restructured_map_landmarks, map_global_obs);
-    std::cout << " Observ: "<< map_global_obs.size() << " map landmarks: " << restructured_map_landmarks.size() << std::endl;
+
+
     /* calculate weigth for each map global observation */
     for (int j = 0; j < map_global_obs.size(); ++j)
     {
@@ -231,8 +236,8 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
       double land_mark_y = assoc_landMark_ids[map_global_obs[j].id].y;
       p->weight *= get_weigth(map_global_obs[j].x, map_global_obs[j].y,
                               land_mark_x, land_mark_y, std_landmark[0], std_landmark[1]);
-      weights.push_back(p->weight);
     }
+    weights.push_back(p->weight);
   }
 }
 
@@ -241,24 +246,48 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
  */
 
 void ParticleFilter::resample() {
-	// TODO: Resample particles with replacement with probability proportional to their weight. 
+#if 0 // By usign the discrete_distribution the error is bigger than the accepted :-/
+	// TODO: Resample particles with replacement with probability proportional to their weight.
 	// NOTE: You may find std::discrete_distribution helpful here.
 	//   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
   // Note:
   // Do not implement the resampling wheel, instead use discrete_distribution
   // https://discussions.udacity.com/t/resampling-algorithm-using-resampling-wheel/241313
+  // http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
   std::vector<Particle> resampled_part;
   std::random_device rd;
   std::mt19937 eng(rd());
   std::discrete_distribution<> d(weights.begin(), weights.end());
-  std::map<int,int> m;
-  for (int i = 0; i <num_particles ; ++i) {
+  for (int i = 0; i <num_particles ; ++i)
+  {
     resampled_part.push_back(particles[d(eng)]);
   }
   // restart the weigths
   weights.clear();
   particles = resampled_part; // this var won't die after?
+#elif defined(RESAMPLING_WHEEL)
+  std::vector<Particle> resampled_part;
+  std::default_random_engine eng;
+  std::uniform_int_distribution<int> indx_rnd(0,num_particles-1);
+  int index = indx_rnd(eng);
+  double mw = *(std::max_element(weights.begin(), weights.end()));
+  std::uniform_real_distribution<double> beta_rnd(0, 2.0f * mw);
+  double beta =0.0;
+  for (int i = 0; i < num_particles; ++i) {
+    beta += beta_rnd(eng);
+    while(beta > particles[index].weight)
+    {
+      beta -= particles[index].weight;
+      index = (index + 1) % num_particles;
+    }
+    resampled_part.push_back(Particle{0,particles[index].x,particles[index].y, particles[index].theta, 1.0f});
+  }
+  weights.clear();
+  particles = resampled_part;
+#endif
 }
+
+
 
 void ParticleFilter::write(std::string filename) {
 	// You don't need to modify this file.

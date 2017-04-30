@@ -4,6 +4,7 @@ project(PARTICLE_FILTER)
 
 # Build the particle filter project and solution.
 # Use C++11
+set(CMAKE_BUILD_TYPE Debug)
 set(SRCS src/main.cpp src/particle_filter.cpp)
 set_source_files_properties(${SRCS} PROPERTIES COMPILE_FLAGS -std=c++0x)
 
